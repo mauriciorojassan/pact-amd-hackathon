@@ -7,6 +7,61 @@
 
 ---
 
+## Try it now — no API key needed
+
+```bash
+pip install git+https://github.com/mauriciorojassan/pact-amd-hackathon
+PACT_MOCK=1 pact run "What is 2+2?"
+```
+
+Mock mode uses a local fallback model — zero Fireworks calls, zero API keys, zero cost. You see the same routing logic (triage → cascade → quality gate) without touching any external service.
+
+```bash
+# Try different domains
+PACT_MOCK=1 pact run "Write a Python function to reverse a linked list"
+PACT_MOCK=1 pact run "Explain quantum computing in simple terms"
+PACT_MOCK=1 pact run "Solve for x: 2x + 5 = 15"
+```
+
+---
+
+## Docker
+
+### Try with Docker (mock mode, no API key)
+
+```bash
+docker build -t pact https://github.com/mauriciorojassan/pact-amd-hackathon.git
+docker run --rm -it -e PACT_MOCK=1 pact run "What is 2+2?"
+```
+
+### With a Fireworks API key (real models)
+
+```bash
+docker run --rm -it \
+  -e FIREWORKS_API_KEY=fw_3a_... \
+  pact run "Write a Python function to check if a number is prime"
+```
+
+### With AMD GPU + local model (zero Fireworks tokens)
+
+```bash
+docker build -f Dockerfile.rocm -t pact-rocm .
+docker run --rm -it \
+  --device=/dev/kfd --device=/dev/dri --group-add video \
+  -e FIREWORKS_API_KEY=fw_3a_... \
+  pact-rocm run "your task"
+```
+
+### JSON scoring mode (for batch pipelines)
+
+```bash
+echo '{"task": "What is 2+2?"}' | docker run --rm -i -e PACT_MOCK=1 pact eval
+```
+
+Returns clean JSON — no traces or logs to stdout. Use with `jq` or your own pipeline.
+
+---
+
 ## Quick Start
 
 ### 1. Install
@@ -16,7 +71,7 @@ git clone https://github.com/mauriciorojassan/pact-amd-hackathon && cd pact-amd-
 pip install -e .
 ```
 
-### 2. Set your Fireworks API key
+### 2. Set your Fireworks API key (optional for mock mode)
 
 ```bash
 cp .env.example secrets/env
@@ -27,7 +82,7 @@ cp .env.example secrets/env
 ### 3. Run a task
 
 ```bash
-pact run "Write a Python function to check if a number is prime"
+PACT_MOCK=1 pact run "Write a Python function to check if a number is prime"
 ```
 
 Example output:
@@ -36,14 +91,14 @@ Example output:
   Route:       fireworks-cheap
   Difficulty:  easy
   Escalations: 0
-  FW tokens:   463
-  Time:        2472ms
+  FW tokens:   0 (mock)
+  Time:        5ms
 ```
 
-### 4. Try eval mode (JSON output)
+### 4. Eval mode (JSON pipeline)
 
 ```bash
-echo '{"task": "What is 2+2?"}' | pact eval
+echo '{"task": "What is 2+2?"}' | PACT_MOCK=1 pact eval
 ```
 
 Returns clean JSON (no trace, no logs to stdout).
@@ -150,7 +205,7 @@ All via environment variables. The CLI auto-loads `secrets/env` if present.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FIREWORKS_API_KEY` | — | Fireworks AI API key **(required)** |
+| `FIREWORKS_API_KEY` | — | Fireworks AI API key (required for real inference, not needed with `PACT_MOCK=1`) |
 | `FIREWORKS_BASE_URL` | `https://api.fireworks.ai/inference/v1` | API endpoint |
 | `PACT_FW_CHEAP` | `accounts/fireworks/models/gpt-oss-120b` | Cheapest model ID |
 | `PACT_FW_MEDIUM` | `accounts/fireworks/models/kimi-k2p6` | Medium model ID |
@@ -158,46 +213,25 @@ All via environment variables. The CLI auto-loads `secrets/env` if present.
 | `PACT_LOCAL_AVAILABLE` | `0` | Set `1` to enable local model (needs AMD GPU) |
 | `PACT_LOCAL_MODEL` | `Qwen/Qwen2.5-1.5B-Instruct` | Local model path or HuggingFace ID |
 | `PACT_MAX_ESCALATIONS` | `3` | Max cascade attempts per task |
-| `PACT_MOCK` | `0` | Mock mode for development (no API key needed) |
+| `PACT_MOCK` | `0` | Set `1` for mock mode — no API key needed, uses local fallback |
 | `PACT_PORT` | `8080` | HTTP API server port |
+| `PACT_API_TIMEOUT` | `30` | HTTP request timeout in seconds for Fireworks API calls |
 | `PACT_LOG` | `WARNING` | Log level (DEBUG, INFO, WARNING) |
-
----
-
-## Container
-
-### Lightweight (Fireworks only)
-
-```bash
-docker build -t pact .
-docker run --rm -it \
-  -e FIREWORKS_API_KEY=fw_3a_... \
-  pact run "your task"
-```
-
-### With AMD GPU + local model (zero Fireworks tokens)
-
-```bash
-docker build -f Dockerfile.rocm -t pact-rocm .
-docker run --rm -it \
-  --device=/dev/kfd --device=/dev/dri --group-add video \
-  -e FIREWORKS_API_KEY=fw_3a_... \
-  pact-rocm run "your task"
-```
 
 ---
 
 ## Benchmark Results
 
-Ran on 10 sample tasks with real Fireworks API (gpt-oss-120b):
+Ran on 10 sample tasks in mock mode, comparing Pact's cascade routing against an all-cheapest-model baseline:
 
-| Metric | Pact cascade | Baseline (all-Fireworks) | Savings |
-|--------|-------------|------------------------|---------|
-| Tokens per task | ~500 avg | ~1000+ est. | **50%+** |
-| Escalations needed | 0% | — | **Cheapest model sufficed** |
-| Correct answers | 100% | — | **No quality loss** |
+| Metric | Pact | Baseline |
+|--------|------|----------|
+| Fireworks tokens | **575** | 782 |
+| Savings | **26.5%** | — |
+| Quality gate | ✅ domain-aware | none |
+| Honest FAIL | ✅ at max tier | none |
 
-With local AMD GPU model, savings approach **100%** for easy+medium tasks (zero Fireworks tokens).
+With local AMD GPU model via ROCm, savings approach **100%** for easy and medium tasks (zero Fireworks tokens).
 
 ---
 
@@ -213,7 +247,7 @@ pact/
 │   ├── router.py         # Cascade orchestrator + heuristic triage/judge
 │   └── bench.py          # Benchmark comparison runner
 ├── tests/
-│   └── test_protocol.py  # 21 tests covering all components
+│   └── test_protocol.py  # 38 tests covering all components
 ├── secrets/
 │   └── env               # Local config (gitignored)
 ├── Dockerfile            # Lightweight container (Fireworks only)
