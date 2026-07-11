@@ -2,6 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](pyproject.toml)
+[![Docker image](https://img.shields.io/badge/docker-pull-blue?logo=docker)](https://github.com/mauriciorojassan/pact-amd-hackathon/releases/tag/v1.0.0)
+[![Try it](https://img.shields.io/badge/try-mock--mode-brightgreen)](/#try-it-now--no-api-key-needed)
 
 **Pact routes each task to the cheapest model that can handle it — using heuristic triage (0 tokens) + cascade execution (cheap → medium → powerful) + heuristic quality verification (0 tokens).**
 
@@ -27,10 +29,26 @@ PACT_MOCK=1 pact run "Solve for x: 2x + 5 = 15"
 
 ## Docker
 
-### Try with Docker (mock mode, no API key)
+### Quick start — pull & run (no build needed)
+
+The container image is available as a [GitHub Release asset](https://github.com/mauriciorojassan/pact-amd-hackathon/releases/tag/v1.0.0) (`pact-image.tar.gz`, ~53 MB compressed):
+
+```bash
+gh release download v1.0.0 --repo mauriciorojassan/pact-amd-hackathon --pattern "*.tar.gz"
+gunzip pact-image.tar.gz
+docker load -i pact-image.tar
+docker run --rm -it -e PACT_MOCK=1 pact run "What is 2+2?"
+```
+
+Or build from source:
 
 ```bash
 docker build -t pact https://github.com/mauriciorojassan/pact-amd-hackathon.git
+```
+
+### Try with Docker (mock mode, no API key)
+
+```bash
 docker run --rm -it -e PACT_MOCK=1 pact run "What is 2+2?"
 ```
 
