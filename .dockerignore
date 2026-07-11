@@ -1,0 +1,15 @@
+# Docker ignore — keep images small
+.git/
+.gitignore
+.venv/
+.venv*/
+__pycache__/
+*.pyc
+.env
+.env.local
+secrets/
+tests/
+bench/
+SUBMISSION.md
+.DS_Store
+Thumbs.db
