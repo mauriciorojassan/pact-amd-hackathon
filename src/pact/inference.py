@@ -33,10 +33,15 @@ class _OpenAICompatible:
         self.available = available
         self._client = None
 
+        # ponytail: 30s default, configurable via env
+        timeout = float(os.getenv("PACT_API_TIMEOUT", "30"))
+
         if available and api_key:
             try:
                 from openai import OpenAI
-                self._client = OpenAI(api_key=api_key, base_url=base_url)
+                self._client = OpenAI(
+                    api_key=api_key, base_url=base_url, timeout=timeout,
+                )
             except ImportError:
                 logger.warning("openai package not installed. pip install openai")
                 self.available = False

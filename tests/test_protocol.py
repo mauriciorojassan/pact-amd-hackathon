@@ -283,3 +283,26 @@ class TestCmdEvalStdin:
         )
         data = json.loads(written)
         assert "pact" in data
+
+
+class TestAPITimeout:
+    """TDD: FireworksInference must set an explicit, configurable API timeout."""
+
+    def test_fireworks_client_has_explicit_timeout(self):
+        """OpenAI client must be created with an explicit timeout."""
+        import os
+        from pact.inference import FireworksInference
+        os.environ["PACT_MOCK"] = "0"
+        os.environ["FIREWORKS_API_KEY"] = "fake-key-for-test"
+        os.environ["PACT_API_TIMEOUT"] = "15"
+        try:
+            fw = FireworksInference()
+            # _client is an OpenAI instance whose _client is an httpx.Client
+            # httpx.Client.timeout is a httpx.Timeout object
+            timeout = fw._client._client.timeout
+            # The connect timeout should be 15s, not the default 600s read
+            assert timeout.connect == 15.0, f"Expected 15.0, got {timeout.connect}"
+        finally:
+            os.environ.pop("PACT_API_TIMEOUT", None)
+            os.environ.pop("FIREWORKS_API_KEY", None)
+            os.environ["PACT_MOCK"] = "1"
