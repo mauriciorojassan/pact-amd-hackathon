@@ -1,7 +1,7 @@
 """Inference backends: local (vLLM/ROCm) and Fireworks AI API.
 
 All models are accessed through the same OpenAI-compatible interface.
-Local inference uses 0 Fireworks tokens — the winning scoring strategy.
+Local inference uses 0 Fireworks tokens — ideal for cost-sensitive routing.
 """
 
 from __future__ import annotations
@@ -117,7 +117,7 @@ class LocalInference(_OpenAICompatible):
 class FireworksInference(_OpenAICompatible):
     """Fireworks AI API inference.
 
-    Tokens consumed here count toward the scoring metric.
+    Tokens consumed here count toward the cost metric.
     Also supports mock mode for development (PACT_MOCK=1).
     """
 

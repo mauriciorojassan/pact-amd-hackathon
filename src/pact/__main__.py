@@ -1,4 +1,4 @@
-"""Pact CLI — entrypoint for scoring environment and development.
+"""Pact CLI — entrypoint for batch evaluation and development.
 
 Usage:
   pact run "task text"          Run a single task
@@ -103,7 +103,7 @@ def cmd_batch(args):
 
 
 def cmd_serve(args):
-    """Start HTTP API server for scoring integration."""
+    """Start HTTP API server for remote evaluation."""
     router = PactRouter()
     port = args.port
 

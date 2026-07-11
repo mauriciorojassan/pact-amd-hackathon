@@ -5,12 +5,6 @@
 
 **Pact routes each task to the cheapest model that can handle it — using heuristic triage (0 tokens) + cascade execution (cheap → medium → powerful) + heuristic quality verification (0 tokens).**
 
-Built for the [AMD Developer Hackathon: ACT II](https://lablab.ai/event/amd-developer-hackathon-act-ii),
-**Track 1 — Hybrid Token-Efficient Routing Agent**.
-
-> **Scoring**: Fewest Fireworks tokens + highest accuracy.
-> **Strategy**: Heuristic triage and judge use **zero Fireworks tokens**. Only task execution consumes tokens, and always on the cheapest sufficient model.
-
 ---
 
 ## Quick Start
@@ -46,7 +40,7 @@ Example output:
   Time:        2472ms
 ```
 
-### 4. Try eval mode (scoring format)
+### 4. Try eval mode (JSON output)
 
 ```bash
 echo '{"task": "What is 2+2?"}' | pact eval
@@ -131,12 +125,12 @@ Local inference uses vLLM on ROCm and counts as **0 Fireworks tokens** — the b
 | Command | Description |
 |---------|-------------|
 | `pact run "task"` | Run a single task with detailed output |
-| `pact eval` | Read task JSON from stdin, output result JSON to stdout *(scoring format)* |
+| `pact eval` | Read task JSON from stdin, output result JSON to stdout |
 | `pact batch file.jsonl` | Run tasks from a JSONL file |
 | `pact serve` | Start HTTP API server (default port 8080) |
 | `pact bench` | Run benchmark comparison (mock mode) |
 
-### Eval format (for scoring)
+### Eval format (JSON pipeline)
 
 Input (stdin):
 ```json
@@ -172,7 +166,7 @@ All via environment variables. The CLI auto-loads `secrets/env` if present.
 
 ## Container
 
-### Lightweight (Fireworks only — for scoring)
+### Lightweight (Fireworks only)
 
 ```bash
 docker build -t pact .
@@ -240,6 +234,6 @@ MIT — see [LICENSE](LICENSE).
 
 **Track**: AMD Developer Hackathon ACT II — Track 1 (Hybrid Token-Efficient Routing Agent)
 
-**Team**: Solo participant. Create team on lablab.ai to get AMD GPU pod access.
+**AMD GPU**: Tested with ROCm + vLLM. Requires a compatible AMD GPU for local inference.
 
 **Tags**: `ai-agents`, `token-efficiency`, `model-routing`, `fireworks-ai`, `amd-roc-m`, `hybrid-inference`

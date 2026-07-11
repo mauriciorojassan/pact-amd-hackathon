@@ -175,7 +175,7 @@ def _escalate_or_pass(route: Route, confidence: float,
     """Escalate to next tier, or FAIL if already at max tier.
     
     At max tier there's nowhere to escalate — FAIL tells the cascade
-    loop to stop and lets the scoring harness distinguish bad answers
+    loop to stop and lets the evaluator distinguish bad answers
     from PASS (acceptable) ones.
     """
     nxt = next_route(route)
