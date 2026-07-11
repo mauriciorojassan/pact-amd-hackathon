@@ -1,17 +1,16 @@
 """Pact Router — cascade orchestration with PACT protocol.
 
-Architecture:
-  Triage (local, 0 tokens) → Executor (chosen route) → Judge (local, 0 tokens)
-  ↳ Escalation loop: if Judge says fail, retry with next tier up
+  Triage (heuristic, 0 tokens) → Executor (FW route) → Judge (heuristic, 0 tokens)
+  ↳ Escalation: if judge flags bad output, retry with next tier up
 
-Cascade order: local → fireworks-cheap → fireworks-medium → fireworks-powerful
+Cascade: fireworks-cheap → fireworks-medium → fireworks-powerful
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import os
+import re
 import time
 from typing import List
 
@@ -23,81 +22,155 @@ from .inference import LocalInference, FireworksInference, InferenceResult
 
 logger = logging.getLogger(__name__)
 
-# Routing table: difficulty → (local_model, fireworks_model)
-# Configurable via env vars at container start.
-_ROUTING = {
-    "easy": {
-        "local": lambda _: os.getenv("PACT_LOCAL_MODEL", "Qwen/Qwen2.5-1.5B-Instruct"),
-        "fireworks": lambda _: os.getenv("PACT_FW_MEDIUM",
-                                         "accounts/fireworks/models/llama-v3p1-8b-instruct"),
-    },
-    "medium": {
-        "local": lambda _: os.getenv("PACT_LOCAL_MODEL", "Qwen/Qwen2.5-1.5B-Instruct"),
-        "fireworks": lambda d: os.getenv("PACT_FW_CHEAP" if d.get("diff") == "easy" else "PACT_FW_MEDIUM",
-                                         "accounts/fireworks/models/llama-v3p1-8b-instruct"),
-    },
-    "hard": {
-        "local": lambda _: None,  # ponytail: skip local for hard tasks
-        "fireworks": lambda _: os.getenv("PACT_FW_POWERFUL",
-                                         "accounts/fireworks/models/llama-v3p1-405b-instruct"),
-    },
+# ── Fireworks model IDs (real, verified 2026-07) ──────────────────────
+FW_CHEAP = os.getenv("PACT_FW_CHEAP",
+                     "accounts/fireworks/models/gpt-oss-120b")
+FW_MEDIUM = os.getenv("PACT_FW_MEDIUM",
+                      "accounts/fireworks/models/kimi-k2p6")
+FW_POWERFUL = os.getenv("PACT_FW_POWERFUL",
+                        "accounts/fireworks/models/deepseek-v4-pro")
+
+ROUTE_MODEL = {
+    Route.FIREWORKS_CHEAP: FW_CHEAP,
+    Route.FIREWORKS_MEDIUM: FW_MEDIUM,
+    Route.FIREWORKS_POWERFUL: FW_POWERFUL,
 }
 
 
-class TriageAgent:
-    """Classifies task difficulty using local model (0 Fireworks tokens)."""
+# ── Heuristic triage (zero tokens, no LLM call) ────────────────────────
 
-    PROMPT = """Analyze this task and classify it. Return ONLY valid JSON with no markdown.
+# ponytail: keyword patterns are cheaper than any model call
+_EASY = re.compile(
+    r"(what (is|are|was|were) |define |explain briefly|"
+    r"write a one.liner|simple |basic |hello world|"
+    r"capital of |current (time|date|year)|"
+    r"convert |translate |summarize)", re.I
+)
 
-Task: {task}
+_HARD = re.compile(
+    r"(debug|optimize|refactor|complex|distributed|"
+    r"concurrency|deadlock|race condition|"
+    r"architectur|design pattern|"
+    r"multi.step|end.to.end|production.grade)", re.I
+)
 
-{{
-  "difficulty": "easy" | "medium" | "hard",
-  "domain": "coding" | "math" | "reasoning" | "qa" | "writing" | "other",
-  "confidence": 0.0-1.0,
-  "reasoning": "brief explanation in <10 words"
-}}"""
+_DOMAIN = [
+    (re.compile(r"(python|rust|go|java|typescript|javascript|"
+                 r"react|vue|django|flask|sql|bash|docker|kubernetes)", re.I),
+     "coding"),
+    (re.compile(r"(math|equation|derivative|integral|probability|"
+                 r"statistics|algebra)", re.I),
+     "math"),
+    (re.compile(r"(write |compose |draft |essay|paragraph|email)", re.I),
+     "writing"),
+    (re.compile(r"(explain |describe |what is |how does |why does)", re.I),
+     "qa"),
+]
 
-    def __init__(self, inference: LocalInference):
-        self.inf = inference
 
-    def analyze(self, task: str) -> PACTSignal:
-        prompt = self.PROMPT.format(task=task[:1500])
-        result = self.inf.generate(prompt, temperature=0.1)
+def _heuristic_triage(task: str) -> PACTSignal:
+    """Classify task difficulty and domain using patterns. 0 tokens."""
+    task_clean = task.strip()
+    length = len(task_clean)
 
-        try:
-            parsed = self._extract_json(result.output)
-            diff = parsed.get("difficulty", "medium")
-            domain = parsed.get("domain", "other")
-            confidence = float(parsed.get("confidence", 0.5))
-            reasoning = parsed.get("reasoning", "")
+    # Domain detection
+    domain = "other"
+    for pattern, label in _DOMAIN:
+        if pattern.search(task_clean):
+            domain = label
+            break
 
-            # Determine initial route based on difficulty + confidence
-            if diff == "hard":
-                route = Route.FIREWORKS_CHEAP  # try cheapest fireworks first
-            elif diff == "medium" and confidence < 0.7:
-                route = Route.FIREWORKS_CHEAP
-            else:
-                route = Route.LOCAL
+    # Difficulty scoring
+    score = 0
 
-            return _triage(diff, domain, route.value, confidence, reasoning)
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
-            logger.warning("Triage parse error: %s | raw: %s", e, result.output[:150])
-            return _triage("medium", "other", Route.FIREWORKS_CHEAP.value, 0.4, "parse_fallback")
+    # Length signals
+    if length > 300:
+        score += 1
+    elif length < 40:
+        score -= 1
 
-    @staticmethod
-    def _extract_json(raw: str) -> dict:
-        """Extract JSON from model output, handling markdown fences."""
-        text = raw.strip()
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0]
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0]
-        return json.loads(text.strip())
+    # Keyword signals
+    if _EASY.search(task_clean):
+        score -= 1
+    if _HARD.search(task_clean):
+        score += 2
 
+    # Structural signals
+    if task_clean.count("\n") > 5:
+        score += 1
+    # "Explain X" (not "briefly") is usually medium+
+    if re.search(r"\bexplain\b", task_clean[:80], re.I) \
+            and "briefly" not in task_clean[:80].lower():
+        score += 1
+
+    diff = "easy" if score <= 0 else ("hard" if score >= 2 else "medium")
+    # Always start at cheapest Fireworks tier (local model unavailable)
+    route = Route.FIREWORKS_CHEAP
+    confidence = max(0.5, min(0.95, 0.7 + score * 0.1))
+
+    return _triage(diff, domain, route.value, confidence,
+                   f"len={length} score={score}")
+
+
+# ── Heuristic judge (zero tokens, no LLM call) ─────────────────────────
+
+def _heuristic_judge(task: str, result: InferenceResult, route: Route) -> PACTSignal:
+    """Validate output quality without any model call.
+
+    Rules:
+      - Empty output → escalate
+      - Error from API → escalate
+      - Very short output for a complex task → escalate
+      - Otherwise → pass
+    """
+    output = result.output.strip()
+    task_clean = task.strip()
+
+    # Empty output or API error
+    if not output:
+        nxt = next_route(route)
+        if nxt:
+            return _verdict(Verdict.ESCALATE, 0.0, nxt.value, "empty_output")
+        # At max tier — tried everything, accept what we have
+        return _verdict(Verdict.PASS, 0.1, reason="empty_but_max_tier")
+
+    if result.error:
+        nxt = next_route(route)
+        if nxt:
+            return _verdict(Verdict.ESCALATE, 0.2, nxt.value, f"api_error:{result.error[:60]}")
+        return _verdict(Verdict.PASS, 0.3, reason="error_but_max_tier")
+
+    # Suspiciously short output for a verbose task
+    task_words = len(task_clean.split())
+    output_words = len(output.split())
+
+    if task_words > 20 and output_words < 3:
+        nxt = next_route(route)
+        if nxt:
+            return _verdict(Verdict.ESCALATE, 0.3, nxt.value, "too_short")
+        return _verdict(Verdict.PASS, 0.4, reason="short_but_max_tier")
+
+    # Check for common failure patterns
+    fail_patterns = [
+        r"(i( am|'m) (sorry|unable|cannot|not able))",
+        r"(as an ai|language model)",
+        r"(error|exception|traceback)",  # only if output looks like error
+    ]
+    for pat in fail_patterns:
+        if re.search(pat, output[:200], re.I):
+            nxt = next_route(route)
+            if nxt:
+                return _verdict(Verdict.ESCALATE, 0.4, nxt.value, f"pattern:{pat[:20]}")
+            return _verdict(Verdict.PASS, 0.5, reason="refusal_but_max")
+
+    # Looks good
+    return _verdict(Verdict.PASS, 0.85, reason="heuristic_ok")
+
+
+# ── Executor ───────────────────────────────────────────────────────────
 
 class ExecutorAgent:
-    """Executes a task on the chosen inference route."""
+    """Executes a task on the chosen Fireworks route."""
 
     PROMPT = """Complete this task. Be concise and accurate.
 
@@ -107,116 +180,34 @@ class ExecutorAgent:
         self.local = local
         self.fireworks = fireworks
 
-    def execute(self, task: str, route: Route, difficulty: str = "medium") -> InferenceResult:
+    def execute(self, task: str, route: Route) -> InferenceResult:
         prompt = self.PROMPT.format(task=task[:3000])
-        model = ""
-
-        if route == Route.LOCAL:
-            model = _ROUTING[difficulty]["local"]({})
-            if model is None:
-                # ponytail: local not available for this tier, fallback to fireworks
-                logger.info("No local model for %s, falling back to fireworks", difficulty)
-                return self.execute(task, Route.FIREWORKS_CHEAP, difficulty)
-            result = self.local.generate(prompt)
-        else:
-            # Map route to Fireworks model key
-            tier = "fireworks"
-            if route == Route.FIREWORKS_CHEAP:
-                tier = "fireworks"
-            model = _ROUTING[difficulty][tier]({"diff": difficulty})
-            result = self.fireworks.generate(model, prompt)
-
-        return result
+        model = ROUTE_MODEL.get(route)
+        if not model:
+            logger.warning("No model for route %s, using cheap", route)
+            model = FW_CHEAP
+        return self.fireworks.generate(model, prompt)
 
 
-class JudgeAgent:
-    """Validates output quality using local model (0 Fireworks tokens).
-
-    Triggers escalation if output is low quality or incorrect.
-    """
-
-    PROMPT = """Evaluate this output for the task. Return ONLY valid JSON with no markdown.
-
-Task: {task}
-Output: {output}
-
-{{
-  "quality": "pass" | "fail",
-  "confidence": 0.0-1.0,
-  "issues": ["issue1"] or [],
-  "escalate": true | false,
-  "reasoning": "brief"
-}}"""
-
-    def __init__(self, inference: LocalInference):
-        self.inf = inference
-
-    def evaluate(self, task: str, result: InferenceResult, route: Route) -> PACTSignal:
-        if not result.output.strip():
-            return _verdict(Verdict.FAIL, 0.0, next_route(route).value if next_route(route) else "",
-                           "empty_output")
-
-        prompt = self.PROMPT.format(task=task[:800], output=result.output[:1500])
-        judge_result = self.inf.generate(prompt, temperature=0.1)
-
-        try:
-            parsed = self._extract_json(judge_result.output)
-            quality = parsed.get("quality", "pass")
-            confidence = float(parsed.get("confidence", 0.5))
-            escalate = parsed.get("escalate", False)
-            issues = parsed.get("issues", [])
-
-            if quality == "fail" or escalate:
-                next_r = next_route(route)
-                if next_r:
-                    echo = "; ".join(issues) if issues else "quality_check"
-                    return _verdict(Verdict.ESCALATE, confidence, next_r.value, echo)
-                else:
-                    # Already at max tier — accept whatever we have
-                    return _verdict(Verdict.PASS, min(confidence, 0.5),
-                                   reason="max_tier_accept")
-
-            return _verdict(Verdict.PASS, confidence, reason="ok")
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
-            logger.warning("Judge parse error: %s", e)
-            # ponytail: if judge can't parse, pass with low confidence
-            return _verdict(Verdict.PASS, 0.4, reason="parse_fallback")
-
-    @staticmethod
-    def _extract_json(raw: str) -> dict:
-        text = raw.strip()
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0]
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0]
-        return json.loads(text.strip())
-
-
-# ---------------------------------------------------------------------------
-# Cascade router
-# ---------------------------------------------------------------------------
+# ── Cascade router ─────────────────────────────────────────────────────
 
 class PactRouter:
-    """Main orchestrator. Triage → Execute → Judge loop with escalation."""
+    """Zero-token triage + judge. Cascade: cheap → medium → powerful."""
 
     def __init__(self):
         self.local = LocalInference()
         self.fireworks = FireworksInference()
-        self.triage = TriageAgent(self.local)
         self.executor = ExecutorAgent(self.local, self.fireworks)
-        self.judge = JudgeAgent(self.local)
 
     def process(self, task: str) -> dict:
-        """Process a single task, return structured result with audit trail."""
         start = time.time()
         signals: List[PACTSignal] = []
 
-        # 1. Triage
-        sig_triage = self.triage.analyze(task)
+        # 1. Heuristic triage (0 tokens)
+        sig_triage = _heuristic_triage(task)
         signals.append(sig_triage)
 
         route = Route(sig_triage.data["route"])
-        difficulty = sig_triage.data.get("diff", "medium")
         escalated = 0
         final_output = ""
         fireworks_tokens = 0
@@ -225,35 +216,34 @@ class PactRouter:
         # 2-4. Cascade execution loop
         for attempt in range(max_attempts + 1):
             # Execute on current route
-            exec_result = self.executor.execute(task, route, difficulty)
-            signals.append(_exec(route.value, exec_result.model, exec_result.tokens))
+            exec_result = self.executor.execute(task, route)
+            signals.append(_exec(route.value, exec_result.model, exec_result.tokens,
+                                error=exec_result.error or ""))
 
             final_output = exec_result.output
-            if route != Route.LOCAL:
-                fireworks_tokens += exec_result.tokens
+            fireworks_tokens += exec_result.tokens
 
-            # Judge the output
-            sig_verdict = self.judge.evaluate(task, exec_result, route)
+            # Heuristic judge (0 tokens)
+            sig_verdict = _heuristic_judge(task, exec_result, route)
             signals.append(sig_verdict)
 
-            if sig_verdict.data["q"] in (Verdict.PASS.value,):
-                break  # Good enough
+            if sig_verdict.data["q"] == Verdict.PASS.value:
+                break
 
             if sig_verdict.data["q"] == Verdict.ESCALATE.value:
-                next_r = next_route(route)
-                if next_r:
-                    route = next_r
+                nxt = next_route(route)
+                if nxt:
+                    route = nxt
                     escalated += 1
                     logger.info("Escalating → %s (attempt %d/%d)",
                                route.value, attempt + 1, max_attempts)
                     continue
-                else:
-                    break  # At max tier, accept output
+                break
 
-            # Verdict.FAIL without escalation — still try next tier
-            next_r = next_route(route)
-            if next_r:
-                route = next_r
+            # Verdict.FAIL without escalation path
+            nxt = next_route(route)
+            if nxt:
+                route = nxt
                 escalated += 1
             else:
                 break
@@ -267,15 +257,13 @@ class PactRouter:
                 "escalated": escalated,
                 "fireworks_tokens": fireworks_tokens,
                 "elapsed_ms": int(elapsed * 1000),
-                "difficulty": difficulty,
+                "difficulty": sig_triage.data.get("diff", "?"),
                 "signals": len(signals),
             },
-            # ponytail: full signal trail for debugging/audit
             "_trace": [s.compact() for s in signals],
         }
 
     def process_batch(self, tasks: List[str], show_trace: bool = False) -> List[dict]:
-        """Process multiple tasks sequentially."""
         results = []
         for task in tasks:
             r = self.process(task)
