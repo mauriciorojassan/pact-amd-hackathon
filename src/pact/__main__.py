@@ -181,7 +181,7 @@ def main():
     parser = argparse.ArgumentParser(
         prog="pact",
         description="Pact — Protocol for Agent Compact Transfer.\n"
-                    "Hybrid token-efficient routing agent for AMD Hackathon ACT II.",
+                    "Hybrid token-efficient routing agent for multi-model inference.",
     )
     sub = parser.add_subparsers(dest="command")
 

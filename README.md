@@ -228,12 +228,4 @@ pact/
 
 MIT — see [LICENSE](LICENSE).
 
----
 
-## Submission
-
-**Track**: AMD Developer Hackathon ACT II — Track 1 (Hybrid Token-Efficient Routing Agent)
-
-**AMD GPU**: Tested with ROCm + vLLM. Requires a compatible AMD GPU for local inference.
-
-**Tags**: `ai-agents`, `token-efficiency`, `model-routing`, `fireworks-ai`, `amd-roc-m`, `hybrid-inference`

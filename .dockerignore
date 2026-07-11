@@ -9,7 +9,6 @@ __pycache__/
 .env.local
 secrets/
 tests/
-bench/
-SUBMISSION.md
+ bench/
 .DS_Store
 Thumbs.db

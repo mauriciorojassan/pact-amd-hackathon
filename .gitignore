@@ -28,5 +28,8 @@ bench/results/
 *.jsonl
 *.log
 
-# Docker
-.dockerignore
+# Local-only deliverables (not for the public repo)
+slides/
+SUBMISSION.md
+
+
