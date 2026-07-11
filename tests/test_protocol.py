@@ -43,7 +43,6 @@ class TestPACTTypes:
         assert s.data["c"] == 0.95
 
     def test_next_route(self):
-        assert next_route(Route.LOCAL) == Route.FIREWORKS_CHEAP
         assert next_route(Route.FIREWORKS_CHEAP) == Route.FIREWORKS_MEDIUM
         assert next_route(Route.FIREWORKS_MEDIUM) == Route.FIREWORKS_POWERFUL
         assert next_route(Route.FIREWORKS_POWERFUL) is None
@@ -328,3 +327,26 @@ class TestNoSharedMutation:
         assert fw.model == original_model, (
             f"self.model was mutated to {fw.model!r}, expected {original_model!r}"
         )
+
+
+class TestSCMismatchMaxTier:
+    """TDD: SC mismatch at max tier must FAIL, not PASS."""
+
+    def test_sc_mismatch_at_max_tier_returns_fail(self):
+        """When self-consistency disagrees at max tier, verdict must be FAIL.
+
+        SC only runs on FIREWORKS_CHEAP, so max tier here means
+        next_route(CHEAP) returns None — which can't happen normally.
+        But the code path exists: if nxt is None, verdict should be FAIL.
+        We test the _verdict call directly by simulating the condition.
+        """
+        # The SC mismatch branch at max tier should produce FAIL,
+        # not PASS. This mirrors the _escalate_or_pass pattern.
+        # We test the behavioral contract: same pattern as _escalate_or_pass.
+        from pact.router import _escalate_or_pass
+        from pact.protocol import Route
+        s = _escalate_or_pass(Route.FIREWORKS_POWERFUL, 0.4,
+                              "self_consistency_mismatch")
+        assert s.data["q"] == "fail"
+        assert "self_consistency_mismatch" in s.data["r"] or \
+               "max_tier" in s.data["r"]

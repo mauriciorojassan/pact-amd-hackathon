@@ -29,20 +29,6 @@ SAMPLE_TASKS = [
 ]
 
 
-def _mock_fireworks_router() -> PactRouter:
-    """Create a PactRouter configured to always use Fireworks (mock)."""
-    import os as _os
-    old = _os.environ.get("PACT_MOCK", "0")
-    _os.environ["PACT_MOCK"] = "1"
-    # Force local to mock, always escalate
-    router = PactRouter()
-    if old:
-        _os.environ["PACT_MOCK"] = old
-    else:
-        del _os.environ["PACT_MOCK"]
-    return router
-
-
 def run():
     """Run benchmark: Pact cascade vs. all-Fireworks baseline."""
     print("═" * 50, file=sys.stderr)

@@ -38,8 +38,8 @@ class Verdict(str, Enum):
 
 
 # ponytail: cascade escalation order
+# Route.LOCAL excluded — not wired in executor yet. Add when GPU support lands.
 ESCALATION_CHAIN = [
-    Route.LOCAL,
     Route.FIREWORKS_CHEAP,
     Route.FIREWORKS_MEDIUM,
     Route.FIREWORKS_POWERFUL,

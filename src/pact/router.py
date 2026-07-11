@@ -19,7 +19,7 @@ from .protocol import (
     PACTSignal, Route, Verdict, next_route,
     triage as _triage, exec_signal as _exec, verdict as _verdict,
 )
-from .inference import LocalInference, FireworksInference, InferenceResult
+from .inference import FireworksInference, InferenceResult
 
 logger = logging.getLogger(__name__)
 
@@ -128,10 +128,6 @@ _REFUSAL = re.compile(
     r"i cannot|cannot (answer|respond|provide|complete)|"
     r"i don't (know|have|understand)|"
     r"it is not (possible|appropriate|ethical))", re.I
-)
-
-_STUCK = re.compile(
-    r"^.{0,5}$",  # very short answer (1-5 chars) for non-trivial tasks
 )
 
 # Domain-specific validation: (pattern, issue, must_match)
@@ -249,8 +245,7 @@ class ExecutorAgent:
 
 {task}"""
 
-    def __init__(self, local: LocalInference, fireworks: FireworksInference):
-        self.local = local
+    def __init__(self, fireworks: FireworksInference):
         self.fireworks = fireworks
 
     def execute(self, task: str, route: Route) -> InferenceResult:
@@ -272,9 +267,8 @@ class PactRouter:
     """
 
     def __init__(self):
-        self.local = LocalInference()
         self.fireworks = FireworksInference()
-        self.executor = ExecutorAgent(self.local, self.fireworks)
+        self.executor = ExecutorAgent(self.fireworks)
 
     def process(self, task: str) -> dict:
         start = time.time()
@@ -320,7 +314,7 @@ class PactRouter:
                                                nxt.value, "self_consistency_mismatch"))
                         continue
                     else:
-                        signals.append(_verdict(Verdict.PASS, 0.4,
+                        signals.append(_verdict(Verdict.FAIL, 0.4,
                                                reason="mismatch_but_max"))
                         break
 
