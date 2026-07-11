@@ -96,16 +96,14 @@ class LocalInference(_OpenAICompatible):
     def generate(self, prompt: str, max_tokens: int = 2048,
                  temperature: float = 0.1) -> InferenceResult:
         if self.mock:
-            # ponytail: universal mock response. Contains all fields each
-            # agent needs — triage reads difficulty, judge reads quality,
-            # executor gets a plausible response string.
-            return InferenceResult(
-                output='{"difficulty":"easy","domain":"general",'
-                       '"confidence":0.92,"reasoning":"mock",'
-                       '"quality":"pass","escalate":false,"issues":[]}',
-                model=self.model,
-                tokens=0,
+            # ponytail: mock returns a plausible natural-language response.
+            # Triage is now heuristic (not LLM), judge validates output
+            # quality — mock should produce something that looks real.
+            mock_answer = (
+                "Here is the result for your request. "
+                "The answer is 42. Python code: def hello(): pass"
             )
+            return InferenceResult(output=mock_answer, model=self.model, tokens=0)
 
         resp = self._call(prompt, max_tokens, temperature)
         return InferenceResult(

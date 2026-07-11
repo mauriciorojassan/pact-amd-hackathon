@@ -18,7 +18,7 @@ Built for the [AMD Developer Hackathon: ACT II](https://lablab.ai/event/amd-deve
 ### 1. Install
 
 ```bash
-git clone <your-repo-url> && cd pact
+git clone https://github.com/mauriciorojassan/pact-amd-hackathon && cd pact-amd-hackathon
 pip install -e .
 ```
 

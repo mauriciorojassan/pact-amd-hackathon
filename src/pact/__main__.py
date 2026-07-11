@@ -62,12 +62,12 @@ def cmd_run(args):
 def cmd_eval(args):
     """Read task from stdin, output JSON result to stdout."""
     router = PactRouter()
+    raw = sys.stdin.read().strip()
     try:
-        data = json.load(sys.stdin)
+        data = json.loads(raw)
         task = data.get("task", data.get("text", ""))
     except json.JSONDecodeError:
-        sys.stdin.seek(0)
-        task = sys.stdin.read().strip()
+        task = raw
 
     if not task:
         print(json.dumps({"error": "no task provided"}), file=sys.stderr)
