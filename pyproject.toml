@@ -1,13 +1,29 @@
 [project]
 name = "pact"
 version = "0.1.0"
-description = "PACT: Protocol for Agent Compact Transfer — hybrid token-efficient routing agent"
+description = "PACT: Protocol for Agent Compact Transfer — hybrid token-efficient routing agent for multi-model inference"
 authors = [
-    { name = "Pact Contributors" },
+    { name = "Mauricio Rojas" },
 ]
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
+
+keywords = [
+    "ai-agents", "token-efficiency", "model-routing",
+    "fireworks-ai", "amd", "hybrid-inference",
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 
 dependencies = [
     "openai>=1.0.0",
@@ -24,6 +40,11 @@ amd = [
 all = [
     "pact[dev,amd]",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mauriciorojassan/amd-act-ii"
+Source = "https://github.com/mauriciorojassan/amd-act-ii"
+Tracker = "https://github.com/mauriciorojassan/amd-act-ii/issues"
 
 [project.scripts]
 pact = "pact.__main__:main"
