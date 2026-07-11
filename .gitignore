@@ -11,9 +11,10 @@ venv/
 .vscode/
 .idea/
 
-# Env (keep .env.example, ignore actual env)
+# Env
 .env
 .env.local
+secrets/
 *.key
 *secret*
 

@@ -19,7 +19,23 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from .router import PactRouter
 
 
+def _load_env():
+    """Load secrets/env if it exists (dotenv-style, without python-dotenv)."""
+    for path in ("secrets/env", ".env", ".env.local"):
+        if os.path.isfile(path):
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, _, val = line.partition("=")
+                    key, val = key.strip(), val.strip().strip("\"'")
+                    if key not in os.environ:  # don't override existing
+                        os.environ[key] = val
+
+
 def _setup_logging():
+    _load_env()
     level = os.getenv("PACT_LOG", "WARNING").upper()
     logging.basicConfig(
         stream=sys.stderr,
