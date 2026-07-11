@@ -306,3 +306,25 @@ class TestAPITimeout:
             os.environ.pop("PACT_API_TIMEOUT", None)
             os.environ.pop("FIREWORKS_API_KEY", None)
             os.environ["PACT_MOCK"] = "1"
+
+
+class TestNoSharedMutation:
+    """TDD: FireworksInference.generate() must not mutate self.model."""
+
+    def test_generate_does_not_mutate_self_model(self):
+        """Calling generate() with a model must not leave it on self.model."""
+        import os
+        from pact.inference import FireworksInference
+        os.environ["PACT_MOCK"] = "1"
+        fw = FireworksInference()
+        original_model = fw.model
+
+        fw.generate("accounts/fireworks/models/gpt-oss-120b", "test prompt")
+        assert fw.model == original_model, (
+            f"self.model was mutated to {fw.model!r}, expected {original_model!r}"
+        )
+
+        fw.generate("accounts/fireworks/models/kimi-k2p6", "another prompt")
+        assert fw.model == original_model, (
+            f"self.model was mutated to {fw.model!r}, expected {original_model!r}"
+        )

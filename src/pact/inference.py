@@ -48,15 +48,15 @@ class _OpenAICompatible:
         else:
             self.available = False
 
-    def _call(self, prompt: str, max_tokens: int = 2048,
-              temperature: float = 0.1) -> dict:
+    def _call(self, prompt: str, model: str,
+              max_tokens: int = 2048, temperature: float = 0.1) -> dict:
         """Make a chat completion call. Returns dict with output + usage."""
         if not self.available or self._client is None:
             return {"output": "", "usage": {}}
 
         try:
             resp = self._client.chat.completions.create(
-                model=self.model,
+                model=model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
                 temperature=temperature,
@@ -70,7 +70,7 @@ class _OpenAICompatible:
                 },
             }
         except Exception as e:
-            logger.error("Inference error [%s]: %s", self.model, e)
+            logger.error("Inference error [%s]: %s", model, e)
             return {"output": "", "usage": {}, "error": str(e)}
 
 
@@ -110,7 +110,7 @@ class LocalInference(_OpenAICompatible):
             )
             return InferenceResult(output=mock_answer, model=self.model, tokens=0)
 
-        resp = self._call(prompt, max_tokens, temperature)
+        resp = self._call(prompt, self.model, max_tokens, temperature)
         return InferenceResult(
             output=resp.get("output", ""),
             model=self.model,
@@ -147,8 +147,6 @@ class FireworksInference(_OpenAICompatible):
 
     def generate(self, model: str, prompt: str, max_tokens: int = 2048,
                  temperature: float = 0.1) -> InferenceResult:
-        self.model = model
-
         if self.mock:
             # ponytail: return plausible mock output for any prompt
             return InferenceResult(
@@ -157,7 +155,7 @@ class FireworksInference(_OpenAICompatible):
                 tokens=25,  # simulate minimal token usage
             )
 
-        resp = self._call(prompt, max_tokens, temperature)
+        resp = self._call(prompt, model, max_tokens, temperature)
         usage = resp.get("usage", {})
         return InferenceResult(
             output=resp.get("output", ""),
