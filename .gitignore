@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Env (keep .env.example, ignore actual env)
+.env
+.env.local
+*.key
+*secret*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pact runtime
+bench/results/
+/models/
+*.jsonl
+*.log
+
+# Docker
+.dockerignore
